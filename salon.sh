@@ -1,61 +1,55 @@
-#! /bin/bash
+#!/bin/bash
 
 PSQL="psql -X --username=freecodecamp --dbname=salon --tuples-only -c"
-
 echo -e "\n~~~~~ MY SALON ~~~~~\n"
-echo -e "\nWelcome to My Salon, how can I help you?"
+echo -e "Welcome to My Salon, how can I help you?\n"
 
-MAIN_MENU() {
-
+GET_SERVICES_ID() {
   if [[ $1 ]]
-    then
-      echo -e "\n$1"
+  then
+    echo -e "\n$1"
   fi
-
-  AVAILABLE_SERVICES=$($PSQL "SELECT service_id, name FROM services ORDER BY service_id")
-
-  while read SERVICE_ID BAR SERVICE_NAME
+  
+  LIST_SERVICES=$($PSQL "SELECT * FROM services")
+  echo "$LIST_SERVICES" | while read SERVICE_ID BAR SERVICE
   do
-    echo "$SERVICE_ID) $SERVICE_NAME"
-  done <<< "$AVAILABLE_SERVICES"
-
+    ID=$(echo $SERVICE_ID | sed 's/ //g')
+    NAME=$(echo $SERVICE | sed 's/ //g')
+    echo "$ID) $SERVICE"
+  done
   read SERVICE_ID_SELECTED
-
-  if [[ ! $SERVICE_ID_SELECTED =~ ^[0-9]+$ ]]
-    then
-      MAIN_MENU "I could not find that service. What would you like today?"
-    else
-      SERVICE_NAME_SELECTED=$($PSQL "SELECT name FROM services WHERE service_id = $SERVICE_ID_SELECTED")
-      SERVICE_NAME_SELECTED=$(echo $SERVICE_NAME_SELECTED | xargs)
-
-      if [[ -z $SERVICE_NAME_SELECTED ]]
-        then
-          MAIN_MENU "I could not find that service. What would you like today?"
-        else
-          echo -e "\nWhat is your phone number?"
-          read CUSTOMER_PHONE
-
-          CUSTOMER_NAME=$($PSQL "SELECT name FROM customers WHERE phone = '$CUSTOMER_PHONE'")
-          CUSTOMER_NAME=$(echo $CUSTOMER_NAME | xargs)
-
-          if [[ -z $CUSTOMER_NAME ]]
-            then
-              echo -e "\nI don't have a record for that phone number, what's your name?"
-              read CUSTOMER_NAME
-              INSERT_NEW_CUSTOMER_RESULT=$($PSQL "INSERT INTO customers(phone, name) VALUES('$CUSTOMER_PHONE', '$CUSTOMER_NAME')")
-          fi
-
-          echo -e "\nWhat time would you like your $SERVICE_NAME_SELECTED, $CUSTOMER_NAME?"
-          read SERVICE_TIME
-
-          CUSTOMER_ID=$($PSQL "SELECT customer_id FROM customers WHERE phone = '$CUSTOMER_PHONE'")
-          CUSTOMER_ID=$(echo $CUSTOMER_ID | xargs)
-
-          INSERT_APPOINTMENT_RESULT=$($PSQL "INSERT INTO appointments(service_id, customer_id, time) VALUES($SERVICE_ID_SELECTED, $CUSTOMER_ID, '$SERVICE_TIME')")
-
-          echo -e "\nI have put you down for a $SERVICE_NAME_SELECTED at $SERVICE_TIME, $CUSTOMER_NAME."
-      fi
-  fi
+  case $SERVICE_ID_SELECTED in
+    [1-5]) NEXT ;;
+        *) GET_SERVICES_ID "I could not find that service. What would you like today?" ;;
+  esac
 }
 
-MAIN_MENU
+NEXT() {
+  echo -e "\nWhat's your phone number?"
+  read CUSTOMER_PHONE
+  # CUSTOMER_PHONE_FORMATED=$(echo $CUSTOMER_PHONE | sed 's/[^0-9]*//g')
+  NAME=$($PSQL "SELECT name FROM customers WHERE phone='$CUSTOMER_PHONE'")
+  CUSTOMER_NAME=$(echo $NAME | sed 's/ //g')
+  if [[ -z $NAME ]]
+  then
+    echo -e "\nI don't have a record for that phone number, what's your name?"
+    read CUSTOMER_NAME
+    NAME=$(echo $NAME | sed 's/ //g')
+    SAVED_TO_TABLE_CUSTOMERS=$($PSQL "INSERT INTO customers(name,phone) VALUES('$NAME','$CUSTOMER_PHONE')")
+  fi
+  
+  GET_SERVICE_NAME=$($PSQL "SELECT name FROM services WHERE service_id=$SERVICE_ID_SELECTED")
+  SERVICE_NAME=$(echo $GET_SERVICE_NAME| sed 's/ //g')
+  CUSTOMER_ID=$($PSQL "SELECT customer_id FROM customers WHERE phone='$CUSTOMER_PHONE'")
+  
+  echo -e "\nWhat time would you like your $SERVICE_NAME, $CUSTOMER_NAME?"
+  read SERVICE_TIME
+  SAVED_TO_TABLE_APPOINTMENTS=$($PSQL "INSERT INTO appointments(customer_id, service_id, time) VALUES($CUSTOMER_ID, $SERVICE_ID_SELECTED, '$SERVICE_TIME')")
+  if [[ $SAVED_TO_TABLE_APPOINTMENTS == "INSERT 0 1" ]]
+  then
+    echo -e "\nI have put you down for a $SERVICE_NAME at $SERVICE_TIME, $CUSTOMER_NAME."
+  fi
+
+}
+
+GET_SERVICES_ID
